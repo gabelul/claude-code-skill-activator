@@ -1,8 +1,8 @@
-# Portable Skill Activator
+# Claude Code Skill Activator
 
-Auto-detect and suggest Claude Code skills based on what you type. No AI at runtime - just fast keyword matching.
+Auto-detect and suggest Claude Code skills based on what you type. AI extracts keywords once, then fast string matching handles runtime - no latency, works offline.
 
-I built this because manually maintaining skill keywords was driving me nuts. The obvious solution: let AI extract keywords once, then never think about it again.
+I built this because manually maintaining skill keywords was driving me nuts. The obvious solution: let AI do the tedious extraction once, then never think about it again.
 
 ## How It Works
 
@@ -27,9 +27,13 @@ python src/skill_activator.py "I need to debug this error"
 # Should match: systematic-debugging
 ```
 
-## Generate INDEX (No API Key Needed!)
+## Generate INDEX
 
-If you have Claude Code installed, piggyback on it:
+Two options - use your own API key or piggyback on Claude Code:
+
+### Option 1: Piggyback on Claude Code (No API Key!)
+
+If you have Claude Code installed, just use it:
 
 ```bash
 # In .env
@@ -41,14 +45,29 @@ AI_MODEL=haiku
 python src/index_generator.py ./skills
 ```
 
-That's it. Uses your existing Claude Code auth.
+Uses your existing Claude Code auth. Zero extra setup.
 
-Want OpenAI or another provider? See [docs/CONFIGURATION.md](docs/CONFIGURATION.md).
+### Option 2: Your Own API Key
+
+Works with OpenAI, Anthropic, Ollama, OpenRouter, or any OpenAI-compatible endpoint:
+
+```bash
+# In .env
+AI_PROVIDER=openai
+AI_API_KEY=sk-...
+AI_MODEL=gpt-4o-mini
+```
+
+```bash
+python src/index_generator.py ./skills
+```
+
+See [docs/CONFIGURATION.md](docs/CONFIGURATION.md) for all providers.
 
 ## Project Structure
 
 ```
-portable-skill-activator/
+claude-code-skill-activator/
   src/
     skill_activator.py     # Matching logic + CLI
     index_generator.py     # AI keyword extraction
@@ -66,32 +85,13 @@ portable-skill-activator/
 
 ## Features
 
-- **No API key required** - piggybacks on Claude Code CLI
-- **Works offline** - AI runs once, matching is instant
+- **Flexible AI** - use Claude Code CLI (no API key) or any OpenAI-compatible provider
+- **Works offline** - AI runs once for indexing, matching is instant
 - **Portable** - copy folder, run anywhere
 - **Smart matching** - word boundaries, intent patterns, primary keyword boost
 
 ---
 
-## Built by Booplex
+Built with AI by Gabi @ [Booplex.com](https://booplex.com)
 
-Built with AI (and the stubborn refusal to maintain keyword lists manually) by Gabi @ [Booplex.com](https://booplex.com)
-
-Part of the ongoing experiment to make AI tools that solve real problems instead of just looking impressive in demos.
-
-**Booplex** - Where AI meets human creativity, and they actually get stuff done.
-
-### Connect
-
-- Website: [booplex.com](https://booplex.com)
-- X: [@booplex](https://x.com/booplex)
-- LinkedIn: [Connect with Gabi](https://linkedin.com/in/gabelul)
-- Email: hey@booplex.com
-
-P.S. - Yes, AI helped build this. That's kind of the whole point.
-
----
-
-## License
-
-MIT
+MIT License
