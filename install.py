@@ -365,8 +365,11 @@ def print_status(paths: dict, status: dict):
             print(f"  {s.DIM}│{s.RESET} INDEX.yaml: {s.YELLOW}missing{s.RESET}")
 
     # AI config
-    if status['ai_configured']:
-        print(f"  {s.DIM}│{s.RESET} AI config: {s.GREEN}configured{s.RESET}")
+    ai_config = get_ai_config()
+    if ai_config['configured']:
+        provider = ai_config.get('provider', 'unknown')
+        model = ai_config.get('model', 'unknown')
+        print(f"  {s.DIM}│{s.RESET} AI config: {s.GREEN}{provider}{s.RESET} ({s.CYAN}{model}{s.RESET})")
     else:
         print(f"  {s.DIM}│{s.RESET} AI config: {s.DIM}not configured{s.RESET}")
 
@@ -386,7 +389,7 @@ def print_status(paths: dict, status: dict):
 # =============================================================================
 
 def get_ai_config() -> dict:
-    """Get AI configuration from .env"""
+    """Get AI configuration from .env - provider-specific settings"""
     script_dir = Path(__file__).parent
     env_file = script_dir / '.env'
 
@@ -395,6 +398,8 @@ def get_ai_config() -> dict:
         'provider': None,
         'model': None,
         'base_url': None,
+        'api_key': None,
+        'fallback_models': None,
     }
 
     if not env_file.exists():
@@ -402,24 +407,54 @@ def get_ai_config() -> dict:
 
     content = env_file.read_text()
 
-    has_key = False
-
+    # First pass: get the provider
+    env_vars = {}
     for line in content.splitlines():
         line = line.strip()
-        if line.startswith('#'):
+        if line.startswith('#') or '=' not in line:
             continue
-        if line.startswith('AI_API_KEY='):
-            value = line.split('=', 1)[1].strip()
-            placeholders = ['your-key', 'your_key', 'changeme', 'replace-me', 'insert-key']
-            has_key = bool(value) and not any(p in value.lower() for p in placeholders)
-        elif line.startswith('AI_PROVIDER='):
-            config['provider'] = line.split('=', 1)[1].strip()
-        elif line.startswith('AI_MODEL='):
-            config['model'] = line.split('=', 1)[1].strip()
-        elif line.startswith('AI_BASE_URL='):
-            config['base_url'] = line.split('=', 1)[1].strip()
+        key, value = line.split('=', 1)
+        key = key.strip()
+        value = value.strip()
+        if key not in env_vars:  # First occurrence wins
+            env_vars[key] = value
 
-    config['configured'] = has_key and bool(config['provider'])
+    # Get provider
+    config['provider'] = env_vars.get('AI_PROVIDER')
+    if not config['provider']:
+        return config
+
+    provider = config['provider'].upper()
+
+    # Get provider-specific settings
+    config['api_key'] = env_vars.get(f'{provider}_API_KEY')
+    config['model'] = env_vars.get(f'{provider}_MODEL')
+    config['base_url'] = env_vars.get(f'{provider}_BASE_URL')
+    config['fallback_models'] = env_vars.get(f'{provider}_FALLBACK_MODELS')
+
+    # Fallback to generic AI_* settings if provider-specific not found
+    if not config['model']:
+        config['model'] = env_vars.get('AI_MODEL')
+    if not config['api_key']:
+        config['api_key'] = env_vars.get('AI_API_KEY')
+    if not config['base_url']:
+        config['base_url'] = env_vars.get('AI_BASE_URL')
+    if not config['fallback_models']:
+        config['fallback_models'] = env_vars.get('AI_FALLBACK_MODELS')
+
+    # Filter out placeholder API keys
+    if config['api_key']:
+        placeholders = ['your-key', 'your_key', 'changeme', 'replace-me', 'insert-key', 'sk-...', 'sk-your']
+        if any(p in config['api_key'].lower() for p in placeholders):
+            config['api_key'] = None
+
+    # claude and ollama providers don't need API keys
+    no_key_providers = ['claude', 'ollama']
+    if config['provider'] in no_key_providers:
+        config['configured'] = bool(config['provider']) and bool(config['model'])
+    else:
+        config['configured'] = bool(config['api_key']) and bool(config['provider'])
+
     return config
 
 
@@ -656,7 +691,7 @@ def install_activator(paths: dict, verbose: bool = True) -> bool:
         return False
 
 
-def configure_settings_json(hook_path: Path, global_install: bool = True, verbose: bool = True) -> bool:
+def configure_settings_json(hook_path: Path, global_install: bool = True, verbose: bool = True, project_path: Path = None) -> bool:
     """Configure settings.json to register the hook"""
     try:
         import json
@@ -664,7 +699,12 @@ def configure_settings_json(hook_path: Path, global_install: bool = True, verbos
         if global_install:
             settings_path = Path.home() / '.claude' / 'settings.json'
         else:
-            settings_path = Path.cwd() / '.claude' / 'settings.json'
+            # For project-level, derive from hook_path or use provided project_path
+            if project_path:
+                settings_path = project_path / '.claude' / 'settings.json'
+            else:
+                # Hook is at .claude/hooks/user-prompt-submit.py, settings is at .claude/settings.json
+                settings_path = hook_path.parent.parent / 'settings.json'
 
         settings_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -766,6 +806,61 @@ if __name__ == "__main__":
         return False
 
 
+def remove_hook_from_settings(verbose: bool = True) -> bool:
+    """Remove hook registration from Claude's settings.json"""
+    import json
+    s = Style
+
+    settings_path = Path.home() / '.claude' / 'settings.json'
+
+    if not settings_path.exists():
+        return True
+
+    try:
+        with open(settings_path, 'r', encoding='utf-8') as f:
+            settings = json.load(f)
+
+        hooks = settings.get('hooks', {})
+        user_prompt_hooks = hooks.get('UserPromptSubmit', [])
+
+        # Filter out our hook
+        new_hooks = []
+        removed = False
+        for hook_group in user_prompt_hooks:
+            new_group_hooks = []
+            for hook in hook_group.get('hooks', []):
+                if 'user-prompt-submit.py' not in hook.get('command', ''):
+                    new_group_hooks.append(hook)
+                else:
+                    removed = True
+            if new_group_hooks:
+                hook_group['hooks'] = new_group_hooks
+                new_hooks.append(hook_group)
+
+        if removed:
+            if new_hooks:
+                hooks['UserPromptSubmit'] = new_hooks
+            else:
+                hooks.pop('UserPromptSubmit', None)
+
+            if hooks:
+                settings['hooks'] = hooks
+            else:
+                settings.pop('hooks', None)
+
+            with open(settings_path, 'w', encoding='utf-8') as f:
+                json.dump(settings, f, indent=2)
+
+            if verbose:
+                print_step("Removed hook from settings.json", "success")
+
+        return True
+    except Exception as e:
+        if verbose:
+            print_step(f"Warning: Could not clean settings.json: {e}", "warning")
+        return False
+
+
 def uninstall(paths: dict, verbose: bool = True) -> bool:
     """Remove installation"""
     s = Style
@@ -785,7 +880,10 @@ def uninstall(paths: dict, verbose: bool = True) -> bool:
 
     if paths['hook_dest'].exists():
         paths['hook_dest'].unlink()
-        removed.append('hook')
+        removed.append('hook file')
+
+    # Also remove hook from settings.json
+    remove_hook_from_settings(verbose)
 
     if verbose:
         if removed:
@@ -813,12 +911,16 @@ def show_info(paths: dict):
     print(f"  {s.DIM}│{s.RESET} Hook:       {s.CYAN}{paths['hook_dest']}{s.RESET}")
     print(f"  {s.DIM}│{s.RESET} Skills:     {s.CYAN}{paths['user_skills']}{s.RESET}")
 
-    print_section("Environment Variable")
-    print(f"  {s.DIM}│{s.RESET} {s.BOLD}CLAUDE_SKILLS_PATH{s.RESET} - Add custom skill directories")
-    if sys.platform == 'win32':
-        print(f"  {s.DIM}│{s.RESET} Example: {s.DIM}set CLAUDE_SKILLS_PATH=C:\\MySkills;D:\\MoreSkills{s.RESET}")
+    print_section("AI Configuration")
+    ai_config = get_ai_config()
+    if ai_config['configured']:
+        print(f"  {s.DIM}│{s.RESET} Provider:   {s.GREEN}{ai_config['provider']}{s.RESET}")
+        print(f"  {s.DIM}│{s.RESET} Model:      {s.GREEN}{ai_config['model']}{s.RESET}")
+        if ai_config.get('base_url'):
+            print(f"  {s.DIM}│{s.RESET} Base URL:   {s.DIM}{ai_config['base_url']}{s.RESET}")
     else:
-        print(f"  {s.DIM}│{s.RESET} Example: {s.DIM}export CLAUDE_SKILLS_PATH=/path/to/skills:/another/path{s.RESET}")
+        print(f"  {s.DIM}│{s.RESET} Status:     {s.YELLOW}Not configured{s.RESET}")
+        print(f"  {s.DIM}│{s.RESET} Copy {s.BOLD}.env.example{s.RESET} to {s.BOLD}.env{s.RESET} and add your API key")
 
     print_section("Skill Search Order")
     print(f"  {s.DIM}│{s.RESET} {s.BOLD}1.{s.RESET} Project local:  {s.DIM}./.claude/skills/ or ./skills/{s.RESET}")
@@ -836,11 +938,142 @@ def show_info(paths: dict):
 # Project Setup
 # =============================================================================
 
+def is_global_hook_installed() -> bool:
+    """Check if the global hook is installed and registered"""
+    import json
+
+    # Check if hook file exists
+    hook_file = get_user_hooks_path() / 'user-prompt-submit.py'
+    if not hook_file.exists():
+        return False
+
+    # Check if registered in settings.json
+    settings_path = Path.home() / '.claude' / 'settings.json'
+    if not settings_path.exists():
+        return False
+
+    try:
+        with open(settings_path, 'r', encoding='utf-8') as f:
+            settings = json.load(f)
+
+        hooks = settings.get('hooks', {})
+        user_prompt_hooks = hooks.get('UserPromptSubmit', [])
+
+        for hook_group in user_prompt_hooks:
+            for hook in hook_group.get('hooks', []):
+                if 'user-prompt-submit.py' in hook.get('command', ''):
+                    return True
+        return False
+    except:
+        return False
+
+
+def install_project_hook(project_path: Path, verbose: bool = True) -> bool:
+    """Install hook for a specific project (project-level settings.json)"""
+    s = Style
+    script_dir = Path(__file__).parent
+
+    try:
+        # Create project .claude directory
+        project_claude_dir = project_path / '.claude'
+        project_hooks_dir = project_claude_dir / 'hooks'
+        project_hooks_dir.mkdir(parents=True, exist_ok=True)
+
+        # Copy activator and index generator to project
+        src_activator = script_dir / 'src' / 'skill_activator.py'
+        src_index_gen = script_dir / 'src' / 'index_generator.py'
+
+        if src_activator.exists():
+            shutil.copy2(src_activator, project_claude_dir / 'skill_activator.py')
+            if verbose:
+                print_step("Copied skill_activator.py to project", "success")
+
+        if src_index_gen.exists():
+            shutil.copy2(src_index_gen, project_claude_dir / 'index_generator.py')
+            if verbose:
+                print_step("Copied index_generator.py to project", "success")
+
+        # Create hook file
+        hook_path = project_hooks_dir / 'user-prompt-submit.py'
+        hook_content = '''#!/usr/bin/env python3
+"""
+Claude Code User Prompt Submit Hook (Project-level)
+Auto-activates skills based on user message keywords
+"""
+
+import sys
+from pathlib import Path
+
+# Add skill activator to path
+activator_path = Path(__file__).parent.parent / 'skill_activator.py'
+if activator_path.exists():
+    sys.path.insert(0, str(activator_path.parent))
+    from skill_activator import user_prompt_submit_hook
+
+    def hook(user_message: str) -> str:
+        return user_prompt_submit_hook(user_message)
+else:
+    def hook(user_message: str) -> str:
+        return user_message
+
+if __name__ == "__main__":
+    if len(sys.argv) > 1:
+        message = " ".join(sys.argv[1:])
+        print(hook(message))
+'''
+        hook_path.write_text(hook_content, encoding='utf-8')
+        if verbose:
+            print_step("Created project hook", "success")
+
+        # Register in project settings.json
+        configure_settings_json(hook_path, global_install=False, verbose=verbose)
+
+        return True
+    except Exception as e:
+        if verbose:
+            print_step(f"Failed to install project hook: {e}", "error")
+        return False
+
+
 def setup_project_skills(project_path: Path, verbose: bool = True) -> bool:
     """Set up skills for a specific project - generates INDEX if skills exist"""
     s = Style
 
     try:
+        # Check if global hook is installed
+        global_hook_ok = is_global_hook_installed()
+
+        if not global_hook_ok:
+            if verbose:
+                print()
+                print_step("Global hook not installed", "warning")
+                print(f"  {s.DIM}Skills won't auto-activate without a hook.{s.RESET}")
+                print()
+                print(f"  {s.BOLD}[1]{s.RESET} Install global hook {s.GREEN}(recommended){s.RESET}")
+                print(f"      {s.DIM}Works for all projects{s.RESET}")
+                print()
+                print(f"  {s.BOLD}[2]{s.RESET} Install project-only hook")
+                print(f"      {s.DIM}Only works in this project{s.RESET}")
+                print()
+                print(f"  {s.BOLD}[3]{s.RESET} Skip - I'll set up hooks myself")
+                print()
+
+            choice = prompt_choice("Choose", range(1, 4), default=1)
+
+            if choice == 1:
+                # Install global hook
+                paths = get_install_paths()
+                print()
+                install_activator(paths, verbose)
+                install_hook(paths, verbose)
+                print()
+            elif choice == 2:
+                # Install project-only hook
+                print()
+                install_project_hook(project_path, verbose)
+                print()
+            # choice 3 = skip
+
         skills_dir = project_path / 'skills'
         alt_skills_dir = project_path / '.claude' / 'skills'
 
@@ -853,7 +1086,7 @@ def setup_project_skills(project_path: Path, verbose: bool = True) -> bool:
             if verbose:
                 print_step(f"Created skills folder: {skills_dir}", "success")
                 print(f"  {s.DIM}Add your skill folders here, each with a SKILL.md file.{s.RESET}")
-                print(f"  {s.DIM}Then run: python skill_activator.py --generate-index{s.RESET}")
+                print(f"  {s.DIM}Then run: python install.py to generate INDEX{s.RESET}")
             return True
 
         skill_count = sum(1 for d in target.iterdir() if d.is_dir() and (d / 'SKILL.md').exists())
