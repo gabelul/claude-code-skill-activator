@@ -16,32 +16,26 @@ No runtime AI. No latency. Just works.
 ## Quick Start
 
 ```bash
-python install.py --user --hook --skills
+python install.py
 ```
 
-Done. Every Claude Code session now has skill auto-detection.
-
-## Interactive Wizard
-
-Run the activator with no arguments to get a menu:
-
-```bash
-python src/skill_activator.py
-```
+That's it. The interactive wizard walks you through everything:
 
 ```
-╭─ Skill Activator ─╮
-│ 1. Test skill matching
-│ 2. List all skills  
-│ 3. Show search paths
-│ 4. Generate INDEX.yaml (AI)
-│ 5. Test AI connection
-│ 6. Configure settings
-│ 7. Exit
-╰───────────────────╯
+    _____ __   _ ____              __  _            __            
+   / ___// /__(_) / /    ___  ____/ /_(_)   ______ / /_____  _____
+   \__ \/ //_/ / / /    / _ \/ __/ __/ / | / / __ `/ __/ __ \/ ___/
+  ___/ / ,< / / / /    /  __/ /_/ /_/ /| |/ / /_/ / /_/ /_/ / /    
+ /____/_/|_/_/_/_/     \___/\__/\__/_/ |___/\__,_/\__/\____/_/     
+
+  [1] Reinstall / Update
+  [2] Generate INDEX.yaml
+  [3] Set up project skills
+  [4] Uninstall
+  [5] Exit
 ```
 
-The wizard walks you through everything - testing matches, generating the index, configuring AI providers. No need to remember CLI flags.
+No CLI flags to remember. Menu handles install, index generation, project setup - everything.
 
 ## Generate INDEX
 
@@ -77,11 +71,11 @@ See [docs/CONFIGURATION.md](docs/CONFIGURATION.md) for all providers.
 ```
 claude-code-skill-activator/
   src/
-    skill_activator.py     # Matching logic + CLI + wizard
+    skill_activator.py     # Matching logic + CLI
     index_generator.py     # AI keyword extraction
     user-prompt-submit.py  # Hook script
   skills/                  # Example skills
-  install.py               # Installer
+  install.py               # Installer + interactive wizard
   docs/                    # Detailed documentation
 ```
 
@@ -93,7 +87,7 @@ claude-code-skill-activator/
 
 ## Features
 
-- **Interactive wizard** - no CLI flags to remember, menu walks you through everything
+- **Interactive wizard** - just run `python install.py`, menu handles everything
 - **Flexible AI** - use Claude Code CLI (no API key) or any OpenAI-compatible provider
 - **Works offline** - AI runs once for indexing, matching is instant
 - **Portable** - copy folder, run anywhere
