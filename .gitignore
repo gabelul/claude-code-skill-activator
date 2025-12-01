@@ -43,6 +43,7 @@ Thumbs.db
 # Test outputs
 test-index.yaml
 INDEX-new.yaml
+temp/
 
 # Logs
 *.log

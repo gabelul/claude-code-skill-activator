@@ -21,11 +21,27 @@ python install.py --user --hook --skills
 
 Done. Every Claude Code session now has skill auto-detection.
 
-**Test it:**
+## Interactive Wizard
+
+Run the activator with no arguments to get a menu:
+
 ```bash
-python src/skill_activator.py "I need to debug this error"
-# Should match: systematic-debugging
+python src/skill_activator.py
 ```
+
+```
+╭─ Skill Activator ─╮
+│ 1. Test skill matching
+│ 2. List all skills  
+│ 3. Show search paths
+│ 4. Generate INDEX.yaml (AI)
+│ 5. Test AI connection
+│ 6. Configure settings
+│ 7. Exit
+╰───────────────────╯
+```
+
+The wizard walks you through everything - testing matches, generating the index, configuring AI providers. No need to remember CLI flags.
 
 ## Generate INDEX
 
@@ -41,10 +57,6 @@ AI_PROVIDER=claude
 AI_MODEL=haiku
 ```
 
-```bash
-python src/index_generator.py ./skills
-```
-
 Uses your existing Claude Code auth. Zero extra setup.
 
 ### Option 2: Your Own API Key
@@ -58,10 +70,6 @@ AI_API_KEY=sk-...
 AI_MODEL=gpt-4o-mini
 ```
 
-```bash
-python src/index_generator.py ./skills
-```
-
 See [docs/CONFIGURATION.md](docs/CONFIGURATION.md) for all providers.
 
 ## Project Structure
@@ -69,7 +77,7 @@ See [docs/CONFIGURATION.md](docs/CONFIGURATION.md) for all providers.
 ```
 claude-code-skill-activator/
   src/
-    skill_activator.py     # Matching logic + CLI
+    skill_activator.py     # Matching logic + CLI + wizard
     index_generator.py     # AI keyword extraction
     user-prompt-submit.py  # Hook script
   skills/                  # Example skills
@@ -85,6 +93,7 @@ claude-code-skill-activator/
 
 ## Features
 
+- **Interactive wizard** - no CLI flags to remember, menu walks you through everything
 - **Flexible AI** - use Claude Code CLI (no API key) or any OpenAI-compatible provider
 - **Works offline** - AI runs once for indexing, matching is instant
 - **Portable** - copy folder, run anywhere
