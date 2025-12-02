@@ -680,10 +680,6 @@ def install_activator(paths: dict, verbose: bool = True) -> bool:
         if verbose:
             print_step(f"Installed skill_activator.py", "success")
 
-        shutil.copy2(paths['source_index_generator'], paths['index_generator_dest'])
-        if verbose:
-            print_step(f"Installed index_generator.py", "success")
-
         return True
     except Exception as e:
         if verbose:
@@ -874,6 +870,7 @@ def uninstall(paths: dict, verbose: bool = True) -> bool:
         paths['activator_dest'].unlink()
         removed.append('skill_activator.py')
 
+    # Legacy cleanup: remove index_generator if it exists from older installs
     if paths['index_generator_dest'].exists():
         paths['index_generator_dest'].unlink()
         removed.append('index_generator.py')
@@ -979,19 +976,13 @@ def install_project_hook(project_path: Path, verbose: bool = True) -> bool:
         project_hooks_dir = project_claude_dir / 'hooks'
         project_hooks_dir.mkdir(parents=True, exist_ok=True)
 
-        # Copy activator and index generator to project
+        # Copy only the activator to project (index_generator stays in source - only needed for INDEX generation)
         src_activator = script_dir / 'src' / 'skill_activator.py'
-        src_index_gen = script_dir / 'src' / 'index_generator.py'
 
         if src_activator.exists():
             shutil.copy2(src_activator, project_claude_dir / 'skill_activator.py')
             if verbose:
                 print_step("Copied skill_activator.py to project", "success")
-
-        if src_index_gen.exists():
-            shutil.copy2(src_index_gen, project_claude_dir / 'index_generator.py')
-            if verbose:
-                print_step("Copied index_generator.py to project", "success")
 
         # Create hook file
         hook_path = project_hooks_dir / 'user-prompt-submit.py'

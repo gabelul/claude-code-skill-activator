@@ -44,6 +44,8 @@ Thumbs.db
 test-index.yaml
 INDEX-new.yaml
 temp/
+.claude/
+test_hook.py
 
 # Logs
 *.log
