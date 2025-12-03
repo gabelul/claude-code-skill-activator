@@ -931,6 +931,40 @@ def show_info(paths: dict):
     print()
 
 
+def show_project_info(project_path: Path):
+    """Show project-specific setup information"""
+    s = Style
+
+    script_dir = Path(__file__).parent
+
+    print_section("Project Setup Complete")
+    print(f"  {s.DIM}│{s.RESET} Project:    {s.CYAN}{project_path}{s.RESET}")
+    print(f"  {s.DIM}│{s.RESET} Skills:     {s.CYAN}{project_path / '.claude' / 'skills'}{s.RESET}")
+
+    # Check if skills exist
+    skills_dir = project_path / '.claude' / 'skills'
+    if skills_dir.exists():
+        skill_count = sum(1 for d in skills_dir.iterdir() if d.is_dir() and (d / 'SKILL.md').exists())
+        has_index = (skills_dir / 'INDEX.yaml').exists()
+        print(f"  {s.DIM}│{s.RESET} Skills:     {s.GREEN}{skill_count} found{s.RESET}")
+        print(f"  {s.DIM}│{s.RESET} INDEX.yaml: {s.GREEN}present{s.RESET}" if has_index else f"  {s.DIM}│{s.RESET} INDEX.yaml: {s.YELLOW}missing{s.RESET}")
+
+    print_section("Next Steps")
+    print(f"  {s.DIM}│{s.RESET} {s.BOLD}1.{s.RESET} Navigate to your project:")
+    print(f"  {s.DIM}│{s.RESET}    {s.DIM}cd {project_path}{s.RESET}")
+    print(f"  {s.DIM}│{s.RESET}")
+    print(f"  {s.DIM}│{s.RESET} {s.BOLD}2.{s.RESET} Open Claude Code in that directory")
+    print(f"  {s.DIM}│{s.RESET}")
+    print(f"  {s.DIM}│{s.RESET} {s.BOLD}3.{s.RESET} Skills will auto-activate when you mention keywords!")
+    print(f"  {s.DIM}│{s.RESET}")
+    print(f"  {s.DIM}│{s.RESET} {s.BOLD}To add more skills:{s.RESET}")
+    print(f"  {s.DIM}│{s.RESET}    - Add folders to {s.CYAN}.claude/skills/{s.RESET}")
+    print(f"  {s.DIM}│{s.RESET}    - Each with a {s.BOLD}SKILL.md{s.RESET} file")
+    print(f"  {s.DIM}│{s.RESET}    - Run: {s.DIM}python {script_dir / 'run.py'}{s.RESET}")
+    print(f"  {s.DIM}│{s.RESET}    - Select option [2] to regenerate INDEX.yaml")
+    print()
+
+
 # =============================================================================
 # Project Setup
 # =============================================================================
@@ -1345,6 +1379,8 @@ def interactive_install(paths: dict):
                 print_step(f"Path does not exist: {project_path}", "error")
             else:
                 setup_project_skills(project_path)
+                print()
+                show_project_info(project_path)
 
         elif choice == 4:
             # Uninstall
@@ -1408,11 +1444,8 @@ def interactive_install(paths: dict):
                 print_step(f"Path does not exist: {project_path}", "error")
             else:
                 setup_project_skills(project_path)
-
-            print()
-            print(f"  {s.GREEN}{s.BOLD}Installation complete!{s.RESET}")
-            print()
-            show_info(paths)
+                print()
+                show_project_info(project_path)
 
         elif choice == 3:
             print()

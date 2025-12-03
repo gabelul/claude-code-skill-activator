@@ -475,7 +475,7 @@ CRITICAL KEYWORD GUIDELINES:
 - Include both nouns AND verbs: analyze, plan, calculate, research
 
 CRITICAL USE_CASES GUIDELINES (VERY IMPORTANT FOR MATCHING):
-- Use cases determine WHEN the skill activates - they are used for matching\!
+- Use cases determine WHEN the skill activates - they are used for matching!
 - ALWAYS start each use case with a present participle verb (-ing form)
 - ALWAYS include the skill's PRIMARY ACTION VERB in at least one use case
 - Example for debugging skill: Debugging errors that occur in production code
