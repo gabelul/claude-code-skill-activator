@@ -3,7 +3,11 @@
     "allow": [
       "Bash(powershell:*)",
       "Bash(python:*)",
-      "Bash(git clone:*)"
+      "Bash(git clone:*)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:docs.anthropic.com)",
+      "WebFetch(domain:docs.claude.com)",
+      "Skill(superpowers:executing-plans)"
     ],
     "deny": [],
     "ask": []

@@ -31,6 +31,47 @@ except ImportError:
     HAS_YAML = False
 
 
+# =============================================================================
+# User Configuration (for output format toggle)
+# =============================================================================
+
+DEFAULT_USER_CONFIG = {
+    "output_format": "classic",  # "classic" or "enhanced"
+    "max_suggestions": 3,        # 1-5, how many skills to show in enhanced mode
+}
+
+
+def get_config_path() -> Path:
+    """Get path to user config file"""
+    return Path.home() / '.claude' / 'skill_config.json'
+
+
+def load_user_config() -> dict:
+    """Load user configuration from ~/.claude/skill_config.json"""
+    config_path = get_config_path()
+    if config_path.exists():
+        try:
+            with open(config_path, 'r', encoding='utf-8') as f:
+                user_config = json.load(f)
+                # Merge with defaults to ensure all keys exist
+                return {**DEFAULT_USER_CONFIG, **user_config}
+        except (json.JSONDecodeError, IOError):
+            pass
+    return DEFAULT_USER_CONFIG.copy()
+
+
+def save_user_config(config: dict) -> bool:
+    """Save user configuration to ~/.claude/skill_config.json"""
+    config_path = get_config_path()
+    try:
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(config_path, 'w', encoding='utf-8') as f:
+            json.dump(config, f, indent=2)
+        return True
+    except IOError:
+        return False
+
+
 @dataclass
 class SkillMetadata:
     """Skill metadata container"""
@@ -38,6 +79,7 @@ class SkillMetadata:
     path: Path
     source: str  # 'system', 'user', 'project', 'custom'
     priority: str = "medium"
+    enforcement: str = "suggested"  # required | suggested | optional
     description: str = ""
     keywords_korean: List[str] = field(default_factory=list)
     keywords_english: List[str] = field(default_factory=list)
@@ -314,6 +356,7 @@ class SkillActivator:
             path=skill_dir,
             source=source,
             priority=frontmatter.get('priority', 'medium'),
+            enforcement=frontmatter.get('enforcement', 'suggested'),
             description=frontmatter.get('description', ''),
             keywords_korean=keywords_korean if isinstance(keywords_korean, list) else [],
             keywords_english=keywords_english if isinstance(keywords_english, list) else [],
@@ -357,6 +400,7 @@ class SkillActivator:
                 path=skill_path if skill_path.exists() else skills_dir,
                 source=source,
                 priority=skill_data.get('priority', 'medium'),
+                enforcement=skill_data.get('enforcement', 'suggested'),
                 description=skill_data.get('description', ''),
                 keywords_korean=keywords.get('korean', []) if isinstance(keywords, dict) else [],
                 keywords_english=keywords.get('english', []) if isinstance(keywords, dict) else [],
@@ -701,37 +745,151 @@ class SkillActivator:
         ]
 
 
+# =============================================================================
+# Output Formatters
+# =============================================================================
+
+def format_classic_output(skill: SkillMetadata, confidence: float) -> str:
+    """Format output in classic mode (single skill, simple format)"""
+    display_confidence = min(confidence, 1.0)  # Cap at 100% for display
+
+    lines = [
+        "<user-prompt-submit-hook>",
+        "SKILL AUTO-ACTIVATED",
+        "",
+        "Based on your request, the following skill has been selected:",
+        "",
+        f"- **{skill.name}** (confidence: {int(display_confidence*100)}%)",
+        f"  {skill.description}",
+        "",
+        f"ACTION REQUIRED: Use the Skill tool to activate `{skill.name}` before proceeding.",
+        "",
+        "User request follows:",
+        "</user-prompt-submit-hook>"
+    ]
+
+    return "\n".join(lines)
+
+
+def format_required_output(skill: SkillMetadata, confidence: float) -> str:
+    """Format output for a required skill (shown alone, strong language)"""
+    display_confidence = min(confidence, 1.0)
+
+    lines = [
+        "<user-prompt-submit-hook>",
+        "⚠️ REQUIRED SKILL",
+        "",
+        "You MUST activate this skill before proceeding:",
+        "",
+        f"  • {skill.name} ({int(display_confidence*100)}% match)",
+        f"    {skill.description}",
+        "",
+        f"ACTION: Use the Skill tool to activate `{skill.name}` BEFORE responding.",
+        "",
+        "User request follows:",
+        "</user-prompt-submit-hook>"
+    ]
+
+    return "\n".join(lines)
+
+
+def format_enhanced_output(matches: List[Tuple[SkillMetadata, float]], max_suggestions: int) -> str:
+    """Format output in enhanced mode (multiple skills, grouped by enforcement)"""
+    if not matches:
+        return ""
+
+    # Group by enforcement
+    suggested = [(s, c) for s, c in matches if s.enforcement == "suggested"]
+    optional = [(s, c) for s, c in matches if s.enforcement == "optional"]
+
+    # Limit total to max_suggestions
+    all_matches = []
+    for s, c in suggested:
+        if len(all_matches) < max_suggestions:
+            all_matches.append((s, c, "suggested"))
+    for s, c in optional:
+        if len(all_matches) < max_suggestions:
+            all_matches.append((s, c, "optional"))
+
+    if not all_matches:
+        return ""
+
+    # Build output
+    lines = ["<user-prompt-submit-hook>"]
+
+    if len(all_matches) == 1:
+        lines.append("SKILL SUGGESTION")
+    else:
+        lines.append("SKILL SUGGESTIONS")
+
+    lines.append("")
+    lines.append("Based on your request, these skills are relevant:")
+    lines.append("")
+
+    # Group by type for display
+    suggested_items = [(s, c) for s, c, t in all_matches if t == "suggested"]
+    optional_items = [(s, c) for s, c, t in all_matches if t == "optional"]
+
+    if suggested_items:
+        lines.append("📚 SUGGESTED:")
+        for skill, conf in suggested_items:
+            display_conf = min(conf, 1.0)
+            lines.append(f"  • {skill.name} ({int(display_conf*100)}% match)")
+            lines.append(f"    {skill.description}")
+        lines.append("")
+
+    if optional_items:
+        lines.append("📌 OPTIONAL:")
+        for skill, conf in optional_items:
+            display_conf = min(conf, 1.0)
+            lines.append(f"  • {skill.name} ({int(display_conf*100)}% match)")
+            lines.append(f"    {skill.description}")
+        lines.append("")
+
+    # Action line
+    if len(all_matches) == 1:
+        skill = all_matches[0][0]
+        lines.append(f"ACTION: Consider using the Skill tool to activate `{skill.name}`.")
+    else:
+        lines.append("ACTION: Consider using the Skill tool to activate relevant skills.")
+
+    lines.append("")
+    lines.append("User request follows:")
+    lines.append("</user-prompt-submit-hook>")
+
+    return "\n".join(lines)
+
+
 # Hook integration for Claude Code
 def user_prompt_submit_hook(user_message: str) -> str:
     """Hook function for Claude Code user-prompt-submit event"""
     try:
+        # Load user configuration
+        config = load_user_config()
+        output_format = config.get("output_format", "classic")
+        max_suggestions = config.get("max_suggestions", 3)
+
         activator = SkillActivator()
         matches = activator.detect_skills(user_message)
 
         if not matches:
             return ""
 
-        # Take the best match (scoring algorithm already considers use_cases)
-        best_skill, confidence = matches[0]
-        display_confidence = min(confidence, 1.0)  # Cap at 100% for display
+        # Classic mode: single best match, simple format
+        if output_format == "classic":
+            best_skill, confidence = matches[0]
+            return format_classic_output(best_skill, confidence)
 
-        # Build auto-activation format
-        lines = [
-            "<user-prompt-submit-hook>",
-            "SKILL AUTO-ACTIVATED",
-            "",
-            f"Based on your request, the following skill has been selected:",
-            "",
-            f"- **{best_skill.name}** (confidence: {int(display_confidence*100)}%)",
-            f"  {best_skill.description}",
-            "",
-            f"ACTION REQUIRED: Use the Skill tool to activate `{best_skill.name}` before proceeding.",
-            "",
-            "User request follows:",
-            "</user-prompt-submit-hook>"
-        ]
+        # Enhanced mode: check for required skills first
+        required_matches = [(s, c) for s, c in matches if s.enforcement == "required"]
 
-        return "\n".join(lines)
+        if required_matches:
+            # Show only the best required skill, alone
+            best_required, confidence = required_matches[0]
+            return format_required_output(best_required, confidence)
+
+        # No required skills - show multiple suggested/optional
+        return format_enhanced_output(matches, max_suggestions)
 
     except Exception as e:
         print(f"Skill activator error: {e}", file=sys.stderr)

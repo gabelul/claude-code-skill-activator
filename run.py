@@ -1101,6 +1101,161 @@ def setup_project_skills(project_path: Path, verbose: bool = True) -> bool:
 
 
 # =============================================================================
+# User Settings Configuration
+# =============================================================================
+
+def get_skill_config_path() -> Path:
+    """Get path to user skill config file"""
+    return Path.home() / '.claude' / 'skill_config.json'
+
+
+def load_skill_config() -> dict:
+    """Load skill configuration"""
+    import json
+    default_config = {
+        "output_format": "classic",
+        "max_suggestions": 3,
+    }
+    config_path = get_skill_config_path()
+    if config_path.exists():
+        try:
+            with open(config_path, 'r', encoding='utf-8') as f:
+                user_config = json.load(f)
+                return {**default_config, **user_config}
+        except:
+            pass
+    return default_config
+
+
+def save_skill_config(config: dict) -> bool:
+    """Save skill configuration"""
+    import json
+    config_path = get_skill_config_path()
+    try:
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(config_path, 'w', encoding='utf-8') as f:
+            json.dump(config, f, indent=2)
+        return True
+    except:
+        return False
+
+
+def configure_settings(verbose: bool = True):
+    """Interactive settings configuration"""
+    s = Style
+
+    current_config = load_skill_config()
+
+    print_section("Configure Settings")
+
+    # Output Format
+    print(f"  {s.DIM}─────────────────────────────────────────{s.RESET}")
+    print()
+    print(f"  {s.BOLD}OUTPUT FORMAT{s.RESET}")
+    print(f"  {s.DIM}Controls how skill suggestions appear in chat{s.RESET}")
+    print()
+
+    current_format = current_config.get("output_format", "classic")
+    current_marker_1 = f" {s.GREEN}(current){s.RESET}" if current_format == "classic" else ""
+    current_marker_2 = f" {s.GREEN}(current){s.RESET}" if current_format == "enhanced" else ""
+
+    print(f"  {s.BOLD}[1]{s.RESET} Classic{current_marker_1}")
+    print(f"      {s.DIM}• Shows only the best matching skill{s.RESET}")
+    print(f"      {s.DIM}• Simple, minimal output{s.RESET}")
+    print(f"      {s.DIM}• Same message style for all skills{s.RESET}")
+    print()
+    print(f"      {s.DIM}Example:{s.RESET}")
+    print(f"      {s.DIM}SKILL AUTO-ACTIVATED{s.RESET}")
+    print(f"      {s.DIM}- **debugging** (confidence: 95%){s.RESET}")
+    print(f"      {s.DIM}ACTION REQUIRED: Use the Skill tool...{s.RESET}")
+    print()
+
+    print(f"  {s.BOLD}[2]{s.RESET} Enhanced{current_marker_2}")
+    print(f"      {s.DIM}• Shows up to 3 relevant skills{s.RESET}")
+    print(f"      {s.DIM}• Groups by importance (required/suggested/optional){s.RESET}")
+    print(f"      {s.DIM}• Stronger language for critical skills{s.RESET}")
+    print()
+    print(f"      {s.DIM}Example:{s.RESET}")
+    print(f"      {s.DIM}⚠️ REQUIRED SKILL{s.RESET}")
+    print(f"      {s.DIM}You MUST activate this skill before proceeding:{s.RESET}")
+    print(f"      {s.DIM}  • frontend-guidelines (98% match){s.RESET}")
+    print()
+
+    format_choice = prompt_choice("Choose output format", range(1, 3), default=1 if current_format == "classic" else 2)
+    new_format = "classic" if format_choice == 1 else "enhanced"
+
+    # Max suggestions (only relevant for enhanced mode)
+    current_max = current_config.get("max_suggestions", 3)
+
+    if new_format == "enhanced":
+        print()
+        print(f"  {s.DIM}─────────────────────────────────────────{s.RESET}")
+        print()
+        print(f"  {s.BOLD}MAX SUGGESTIONS{s.RESET} {s.DIM}(Enhanced mode only){s.RESET}")
+        print(f"  {s.DIM}How many skills to show when multiple match{s.RESET}")
+        print()
+        print(f"  {s.BOLD}[1]{s.RESET} 1 - Minimal, just the best match")
+        print(f"  {s.BOLD}[2]{s.RESET} 2 - Best match + one alternative")
+        print(f"  {s.BOLD}[3]{s.RESET} 3 - Up to three relevant skills {s.GREEN}(recommended){s.RESET}")
+        print()
+
+        max_choice = prompt_choice("Choose max suggestions", range(1, 4), default=current_max)
+        new_max = max_choice
+    else:
+        new_max = current_max  # Keep existing value
+
+    # Save config
+    new_config = {
+        "output_format": new_format,
+        "max_suggestions": new_max,
+    }
+
+    if save_skill_config(new_config):
+        print()
+        print(f"  {s.DIM}─────────────────────────────────────────{s.RESET}")
+        print()
+        print_step("Settings saved!", "success")
+        print()
+        print(f"  {s.DIM}│{s.RESET} Output format:   {s.CYAN}{new_format}{s.RESET}")
+        print(f"  {s.DIM}│{s.RESET} Max suggestions: {s.CYAN}{new_max}{s.RESET}")
+        print(f"  {s.DIM}│{s.RESET} Config file:     {s.DIM}{get_skill_config_path()}{s.RESET}")
+    else:
+        print_step("Failed to save settings", "error")
+
+
+def prompt_output_format_on_install():
+    """Ask user for preferred output format during first install"""
+    s = Style
+
+    print_section("Choose Output Format")
+    print()
+    print(f"  {s.DIM}One more thing - choose how skill suggestions appear:{s.RESET}")
+    print()
+
+    print(f"  {s.BOLD}[1]{s.RESET} Classic {s.GREEN}(recommended for beginners){s.RESET}")
+    print(f"      {s.DIM}• Simple, shows 1 skill at a time{s.RESET}")
+    print()
+
+    print(f"  {s.BOLD}[2]{s.RESET} Enhanced")
+    print(f"      {s.DIM}• Rich, shows multiple skills with priorities{s.RESET}")
+    print(f"      {s.DIM}• Groups by importance (required/suggested/optional){s.RESET}")
+    print()
+
+    choice = prompt_choice("Choose format", range(1, 3), default=1)
+
+    config = {
+        "output_format": "classic" if choice == 1 else "enhanced",
+        "max_suggestions": 3,
+    }
+
+    if save_skill_config(config):
+        format_name = "Classic" if choice == 1 else "Enhanced"
+        print_step(f"Output format set to: {format_name}", "success")
+    else:
+        print_step("Using default settings (classic)", "info")
+
+
+# =============================================================================
 # Interactive Wizard
 # =============================================================================
 
@@ -1270,13 +1425,16 @@ def interactive_install(paths: dict):
         print(f"  {s.BOLD}[3]{s.RESET} Set up project skills")
         print(f"      {s.DIM}Initialize skills for a specific project{s.RESET}")
         print()
-        print(f"  {s.BOLD}[4]{s.RESET} Uninstall")
+        print(f"  {s.BOLD}[4]{s.RESET} Configure settings")
+        print(f"      {s.DIM}Change output format and other preferences{s.RESET}")
+        print()
+        print(f"  {s.BOLD}[5]{s.RESET} Uninstall")
         print(f"      {s.DIM}Remove activator and hook (keeps your skills){s.RESET}")
         print()
-        print(f"  {s.BOLD}[5]{s.RESET} Exit")
+        print(f"  {s.BOLD}[6]{s.RESET} Exit")
         print()
 
-        choice = prompt_choice("Choose an option", range(1, 6), default=5)
+        choice = prompt_choice("Choose an option", range(1, 7), default=6)
 
         if choice == 1:
             # Reinstall - full installation
@@ -1345,6 +1503,10 @@ def interactive_install(paths: dict):
                 show_project_info(project_path)
 
         elif choice == 4:
+            # Configure settings
+            configure_settings()
+
+        elif choice == 5:
             # Uninstall
             response = input(f"  {s.YELLOW}Are you sure you want to uninstall? [y/N]:{s.RESET} ").strip().lower()
             if response == 'y':
@@ -1352,7 +1514,7 @@ def interactive_install(paths: dict):
             else:
                 print_step("Uninstall cancelled", "info")
 
-        elif choice == 5:
+        elif choice == 6:
             print()
             print(f"  {s.DIM}Goodbye!{s.RESET}")
 
@@ -1382,6 +1544,10 @@ def interactive_install(paths: dict):
                 print_step(f"Found {status['skill_count']} existing skills", "info")
                 prompt_generate_index(paths['user_skills'], status['skill_count'])
 
+            # Ask for output format preference
+            print()
+            prompt_output_format_on_install()
+
             print()
             print(f"  {s.GREEN}{s.BOLD}Installation complete!{s.RESET}")
             print()
@@ -1392,6 +1558,10 @@ def interactive_install(paths: dict):
             print_section("Installing")
             install_activator(paths)
             install_hook(paths)
+
+            # Ask for output format preference
+            print()
+            prompt_output_format_on_install()
 
             print_section("Project Setup")
             default_path = Path.cwd()

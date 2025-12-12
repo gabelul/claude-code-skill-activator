@@ -449,7 +449,8 @@ Your task is to analyze the skill content and generate:
 3. Use cases describing when to use this skill
 4. Intent patterns (regex) for matching complex user requests
 5. Priority level (high/medium/low) based on skill importance
-6. A confidence threshold (0.5-0.9) - higher means more strict matching
+6. Enforcement level (required/suggested/optional) based on how critical the skill is
+7. A confidence threshold (0.5-0.9) - higher means more strict matching
 
 Output ONLY valid JSON, no markdown, no explanation. Use this exact format:
 {{
@@ -460,6 +461,7 @@ Output ONLY valid JSON, no markdown, no explanation. Use this exact format:
   "use_cases": ["Sentence starting with -ing verb", ...],
   "intent_patterns": ["regex pattern 1", "regex pattern 2", ...],
   "priority": "high|medium|low",
+  "enforcement": "required|suggested|optional",
   "confidence_threshold": 0.7,
   "description": "One-line description of when to use this skill"
 }}
@@ -489,6 +491,12 @@ INTENT_PATTERNS GUIDELINES (regex for complex matching):
 - Example for code review: ["review.*code", "check.*for.*issues"]
 - Example for debugging: ["fix.*bug", "debug.*error", "trace.*issue"]
 - Use .* for flexible matching between words
+
+ENFORCEMENT GUIDELINES:
+- required: Skills that MUST be used before proceeding (guardrails, safety checks, mandatory patterns)
+- suggested: Skills that are recommended but not mandatory (best practices, helpful workflows)
+- optional: Skills that might be useful but are not important (nice-to-have, supplementary info)
+- Default to "suggested" for most skills - only use "required" for critical guardrails
 
 Other guidelines:
 - Tags should be general categories (max 5)
