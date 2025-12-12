@@ -754,32 +754,8 @@ def install_hook(paths: dict, verbose: bool = True, force: bool = False) -> bool
     try:
         paths['user_hooks'].mkdir(parents=True, exist_ok=True)
 
-        hook_content = '''#!/usr/bin/env python3
-"""
-Claude Code User Prompt Submit Hook
-Auto-activates skills based on user message keywords
-"""
-
-import sys
-from pathlib import Path
-
-# Add skill activator to path
-activator_path = Path(__file__).parent.parent / 'skill_activator.py'
-if activator_path.exists():
-    sys.path.insert(0, str(activator_path.parent))
-    from skill_activator import user_prompt_submit_hook
-
-    def hook(user_message: str) -> str:
-        return user_prompt_submit_hook(user_message)
-else:
-    def hook(user_message: str) -> str:
-        return user_message
-
-if __name__ == "__main__":
-    if len(sys.argv) > 1:
-        message = " ".join(sys.argv[1:])
-        print(hook(message))
-'''
+        # Copy the hook from source instead of hardcoding
+        source_hook = paths['src_dir'] / 'user-prompt-submit.py'
 
         if paths['hook_dest'].exists() and not force:
             print_step(f"Hook already exists at {paths['hook_dest']}", "warning")
@@ -788,7 +764,12 @@ if __name__ == "__main__":
                 print_step("Skipped hook installation", "info")
                 return False
 
-        paths['hook_dest'].write_text(hook_content, encoding='utf-8')
+        if source_hook.exists():
+            shutil.copy2(source_hook, paths['hook_dest'])
+        else:
+            if verbose:
+                print_step(f"Source hook not found: {source_hook}", "error")
+            return False
 
         if verbose:
             print_step(f"Installed hook", "success")
@@ -1018,37 +999,18 @@ def install_project_hook(project_path: Path, verbose: bool = True) -> bool:
             if verbose:
                 print_step("Copied skill_activator.py to project", "success")
 
-        # Create hook file
+        # Copy hook from source
         hook_path = project_hooks_dir / 'user-prompt-submit.py'
-        hook_content = '''#!/usr/bin/env python3
-"""
-Claude Code User Prompt Submit Hook (Project-level)
-Auto-activates skills based on user message keywords
-"""
+        src_hook = script_dir / 'src' / 'user-prompt-submit.py'
 
-import sys
-from pathlib import Path
-
-# Add skill activator to path
-activator_path = Path(__file__).parent.parent / 'skill_activator.py'
-if activator_path.exists():
-    sys.path.insert(0, str(activator_path.parent))
-    from skill_activator import user_prompt_submit_hook
-
-    def hook(user_message: str) -> str:
-        return user_prompt_submit_hook(user_message)
-else:
-    def hook(user_message: str) -> str:
-        return user_message
-
-if __name__ == "__main__":
-    if len(sys.argv) > 1:
-        message = " ".join(sys.argv[1:])
-        print(hook(message))
-'''
-        hook_path.write_text(hook_content, encoding='utf-8')
-        if verbose:
-            print_step("Created project hook", "success")
+        if src_hook.exists():
+            shutil.copy2(src_hook, hook_path)
+            if verbose:
+                print_step("Created project hook", "success")
+        else:
+            if verbose:
+                print_step(f"Source hook not found: {src_hook}", "error")
+            return False
 
         # Register in project settings.json
         configure_settings_json(hook_path, global_install=False, verbose=verbose)
